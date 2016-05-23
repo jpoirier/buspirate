@@ -74,6 +74,139 @@ func (bp *BusPirate) SetPWM(duty float64) {
 	bp.term.Read(buf[:1])
 }
 
+func (bp *BusPirate) SpiEnter() error {
+	buf := []byte{0x01}
+	reply := make([]byte, 4)
+	bp.term.Write(buf)
+	bp.term.Read(reply)
+	if string(reply) == "SPI1" {
+		return nil
+	}
+	return fmt.Errorf("Fail to enter SPI mode")
+}
+
+func (bp *BusPirate) SpiLeave() error {
+	buf := []byte{0x00}
+	reply := make([]byte, 5)
+	bp.term.Write(buf)
+	bp.term.Read(reply)
+	if string(reply) == "BBIO1" {
+		return nil
+	}
+	return fmt.Errorf("Fail to enter SPI mode")
+}
+
+/*
+00001101 – Sniff all SPI traffic
+00001110 – Sniff when CS low
+00001111 – Sniff when CS high
+*/
+
+// 00000010 – CS low (0)
+// 00000011 – CS high (1)
+func (bp *BusPirate) SpiCs(high bool) error {
+	buf := []byte{0x02}
+	if high {
+		buf[0] |= 0x01
+	}
+	bp.term.Write(buf)
+	bp.term.Read(buf)
+	if buf[0] == 0x01 {
+		return nil
+	}
+	return fmt.Errorf("Set CS bad response")
+}
+
+// 0001xxxx – Bulk SPI transfer, send 1-16 bytes (0=1byte!)
+func (bp *BusPirate) SpiTransfer(send []byte) (*[]byte, error) {
+	l := len(send)
+	if l < 1 || l > 16 {
+		return nil, fmt.Errorf("Length must be beetween 1 and 16")
+	}
+	buf := []byte{0x10}
+	buf[0] |= byte(l-1)
+	bp.term.Write(buf)
+	bp.term.Read(buf)
+	if buf[0] != 0x01 {
+		return nil, fmt.Errorf("Set CS bad response")
+	}
+	bp.term.Write(send)
+	bp.term.Read(send)
+	return &send, nil
+}
+
+// 0100wxyz – Configure peripherals, w=power, x=pullups, y=AUX, z=CS
+func (bp *BusPirate) SpiConfigure(power, pullups, aux, cs bool) error {
+	buf := []byte{0x40}
+	if power {
+		buf[0] |= 0x08
+	}
+	if pullups {
+		buf[0] |= 0x04
+	}
+	if aux {
+		buf[0] |= 0x02
+	}
+	if cs {
+		buf[0] |= 0x01
+	}
+	bp.term.Write(buf)
+	bp.term.Read(buf)
+	if buf[0] == 0x01 {
+		return nil
+	}
+	return fmt.Errorf("Set SPI config bad response")
+}
+
+type SpiSpeed uint8
+
+const (
+	SpiSpeed30khz SpiSpeed = iota
+	SpiSpeed125khz
+	SpiSpeed250khz
+	SpiSpeed1mhz
+	SpiSpeed2mhz
+	SpiSpeed2600khz
+	SpiSpeed4mhz
+	SpiSpeed8mhz
+)
+
+// 01100xxx – Set SPI speed, 30, 125, 250khz; 1, 2, 2.6, 4, 8MHz
+// 000=30kHz, 001=125kHz, 010=250kHz, 011=1MHz, 100=2MHz, 101=2.6MHz, 110=4MHz, 111=8MHz
+func (bp *BusPirate) SpiSpeed(speed SpiSpeed) error {
+	buf := []byte{0x60}
+	buf[0] |= byte(speed & 0x07)
+	bp.term.Write(buf)
+	bp.term.Read(buf)
+	if buf[0] == 0x01 {
+		return nil
+	}
+	return fmt.Errorf("Set SPI speed bad response")
+}
+
+// 1000wxyz – SPI config, w=output type, x=idle, y=clock edge, z=sample
+func (bp *BusPirate) SpiConfigure2(output33v, idle, edge, sample bool) error {
+	buf := []byte{0x80}
+	if output33v {
+		buf[0] |= 0x08
+	}
+	if idle {
+		buf[0] |= 0x04
+	}
+	if edge {
+		buf[0] |= 0x02
+	}
+	if sample {
+		buf[0] |= 0x01
+	}
+	bp.term.Write(buf)
+	bp.term.Read(buf)
+	if buf[0] == 0x01 {
+		return nil
+	}
+	return fmt.Errorf("Set SPI config2 bad response")
+}
+
 func clamp(v *float64, lower, upper float64) {
 	if *v < lower {
 		*v = lower
