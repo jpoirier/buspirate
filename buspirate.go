@@ -43,7 +43,7 @@ func (bp *BusPirate) enterBinaryMode() error {
 	return nil
 }
 
-func (bp *BusPirate) leaveBinaryMode() error {
+func (bp *BusPirate) LeaveBinaryMode() error {
 	if _, err := bp.Write([]byte{0x0F}); err != nil {
 		return fmt.Errorf("error, could not leave binary mode")
 	}
