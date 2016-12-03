@@ -4,140 +4,162 @@ package buspirate
 
 import (
 	"fmt"
-	"github.com/pkg/term"
 	"time"
+
+	"github.com/jpoirier/serial"
 )
 
 // Open opens a connection to a BusPirate module and places it into binary mode.
-func Open(dev string) (*BusPirate, error) {
-	t, err := term.Open(dev, term.Speed(115200), term.RawMode)
+func Open(dev string, readTimeout time.Duration) (*BusPirate, error) {
+	t, err := serial.OpenPort(&serial.Config{Name: dev, Baud: 115200, ReadTimeout: readTimeout * time.Second})
 	if err != nil {
 		return nil, err
 	}
-	bp := BusPirate{term: t}
+	bp := BusPirate{t}
 	return &bp, bp.enterBinaryMode()
 }
 
 // BusPirate represents a connection to a remote BusPirate device.
 type BusPirate struct {
-	term *term.Term
+	*serial.Port
 }
 
 // enterBinaryMode resets the BusPirate and enters binary mode.
 // http://dangerousprototypes.com/docs/Bitbang
 func (bp *BusPirate) enterBinaryMode() error {
-	bp.term.Flush()
-	bp.term.Write([]byte{'\n', '\n', '\n', '\n', '\n', '\n', '\n', '\n', '\n', '\n'})
-	const n = 30
-	for i := 0; i < n; i++ {
+	bp.Flush()
+	bp.Write([]byte{'\n', '\n', '\n', '\n', '\n', '\n', '\n', '\n', '\n', '\n'})
+	for i := 0; i < 30; i++ {
 		// send binary reset
-		bp.term.Write([]byte{0x00})
-		time.Sleep(10 * time.Millisecond)
-		n, err := bp.term.Available()
-		if err != nil {
-			return err
+		if _, err := bp.Write([]byte{0x00}); err != nil {
+			return fmt.Errorf("error, could not enter binary mode")
 		}
-		buf := make([]byte, n)
-		_, err = bp.term.Read(buf)
-		if err != nil {
-			return err
-		}
-		if string(buf) == "BBIO1" {
-			return nil
+		buf := make([]byte, 5)
+		n, _ := bp.Read(buf)
+		if n == 0 || string(buf) != "BBIO1" {
+			return fmt.Errorf("error, could not enter binary mode")
 		}
 	}
-	return fmt.Errorf("could not enter binary mode")
+	return nil
+}
+
+func (bp *BusPirate) leaveBinaryMode() error {
+	if _, err := bp.Write([]byte{0x0F}); err != nil {
+		return fmt.Errorf("error, could not leave binary mode")
+	}
+	time.Sleep(1000 * time.Millisecond)
+	bp.Flush()
+	return nil
 }
 
 // PowerOn turns on the 5v and 3v3 regulators.
-func (bp *BusPirate) PowerOn() {
-	buf := []byte{0xc0}
-	bp.term.Write(buf)
-	bp.term.Read(buf)
+func (bp *BusPirate) PowerOn() error {
+	buf := []byte{0xC0}
+	if _, err := bp.Write(buf); err != nil {
+		return fmt.Errorf("error turning power on")
+	}
+	if n, _ := bp.Read(buf); n == 0 {
+		return fmt.Errorf("error turning power on")
+	}
+	return nil
 }
 
 // PowerOff turns off the 5v and 3v3 regulators.
-func (bp *BusPirate) PowerOff() {
+func (bp *BusPirate) PowerOff() error {
 	buf := []byte{0x80}
-	bp.term.Write(buf)
-	bp.term.Read(buf)
+	if _, err := bp.Write(buf); err != nil {
+		return fmt.Errorf("error turning power off")
+	}
+	if n, _ := bp.Read(buf); n == 0 {
+		return fmt.Errorf("error turning power off")
+	}
+	return nil
 }
 
 // SetPWM enables PWM output on the AUX pin with the specified duty cycle.
 // duty is clamped between [0, 1].
-func (bp *BusPirate) SetPWM(duty float64) {
+func (bp *BusPirate) SetPWM(duty float64) error {
 	clamp(&duty, 0.0, 1.0)
 	PRy := uint16(0x3e7f)
 	OCR := uint16(float64(PRy) * duty)
 	buf := []byte{0x12, 0x00, uint8(OCR >> 8), uint8(OCR), uint8(PRy >> 8), uint8(PRy)}
-	bp.term.Write(buf)
-	bp.term.Read(buf[:1])
+	if _, err := bp.Write(buf); err != nil {
+		return fmt.Errorf("error setting pwm")
+	}
+	if n, _ := bp.Read(buf[:1]); n == 0 {
+		return fmt.Errorf("error setting pwm")
+	}
+	return nil
 }
 
+func clamp(v *float64, lower, upper float64) {
+	if *v < lower {
+		*v = lower
+	}
+	if *v > upper {
+		*v = upper
+	}
+}
+
+const (
+	resetBitbangMode    = 0x00
+	spiRawMode          = 0x01
+	spiCSState          = 0x02
+	spiBulkTransferMode = 0x10
+	spiPeriphCfg        = 0x40
+	spiSpeedCfg         = 0x60
+	spiCfg              = 0x80
+	spiWriteReadCmd     = 0x04
+	spiWriteReadCmdNoCS = 0x05
+	OneSecDelay         = 10000
+)
+
+// SpiEnter enters binary SPI mode.
 func (bp *BusPirate) SpiEnter() error {
-	buf := []byte{0x01}
+	if _, err := bp.Write([]byte{spiRawMode}); err != nil {
+		return err
+	}
+
 	reply := make([]byte, 4)
-	bp.term.Write(buf)
-	bp.term.Read(reply)
-	if string(reply) == "SPI1" {
-		return nil
+	n, _ := bp.Read(reply)
+	if n == 0 || string(reply) != "SPI1" {
+		return fmt.Errorf("error entering SPI mode")
 	}
-	return fmt.Errorf("Fail to enter SPI mode")
+
+	return nil
 }
 
+// SpiLeave exits SPI mode, returning to bitbang mode.
 func (bp *BusPirate) SpiLeave() error {
-	buf := []byte{0x00}
-	reply := make([]byte, 5)
-	bp.term.Write(buf)
-	bp.term.Read(reply)
-	if string(reply) == "BBIO1" {
-		return nil
-	}
-	return fmt.Errorf("Fail to enter SPI mode")
+	_, err := bp.Write([]byte{resetBitbangMode})
+	return err
 }
 
-/*
-00001101 – Sniff all SPI traffic
-00001110 – Sniff when CS low
-00001111 – Sniff when CS high
-*/
-
-// 00000010 – CS low (0)
-// 00000011 – CS high (1)
-func (bp *BusPirate) SpiCs(high bool) error {
-	buf := []byte{0x02}
+// SpiCS sets the chip select state.
+// high = true, low = false
+func (bp *BusPirate) SpiCS(high bool) error {
+	// 00000010 – CS low (0)
+	// 00000011 – CS high (1)
+	buf := []byte{spiCSState} // default to disabled
 	if high {
 		buf[0] |= 0x01
 	}
-	bp.term.Write(buf)
-	bp.term.Read(buf)
-	if buf[0] == 0x01 {
-		return nil
+	if _, err := bp.Write(buf); err != nil {
+		return err
 	}
-	return fmt.Errorf("Set CS bad response")
+
+	n, _ := bp.Read(buf)
+	if n == 0 || buf[0] != 0x01 {
+		return fmt.Errorf("error setting chip select state")
+	}
+
+	return nil
 }
 
-// 0001xxxx – Bulk SPI transfer, send 1-16 bytes (0=1byte!)
-func (bp *BusPirate) SpiTransfer(send []byte) (*[]byte, error) {
-	l := len(send)
-	if l < 1 || l > 16 {
-		return nil, fmt.Errorf("Length must be beetween 1 and 16")
-	}
-	buf := []byte{0x10}
-	buf[0] |= byte(l-1)
-	bp.term.Write(buf)
-	bp.term.Read(buf)
-	if buf[0] != 0x01 {
-		return nil, fmt.Errorf("Set CS bad response")
-	}
-	bp.term.Write(send)
-	bp.term.Read(send)
-	return &send, nil
-}
-
+// SpiCfgPeriph configures the spi peripherals.
 // 0100wxyz – Configure peripherals, w=power, x=pullups, y=AUX, z=CS
-func (bp *BusPirate) SpiConfigure(power, pullups, aux, cs bool) error {
-	buf := []byte{0x40}
+func (bp *BusPirate) SpiCfgPeriph(power, pullups, aux, cs bool) error {
+	buf := []byte{spiPeriphCfg}
 	if power {
 		buf[0] |= 0x08
 	}
@@ -150,16 +172,23 @@ func (bp *BusPirate) SpiConfigure(power, pullups, aux, cs bool) error {
 	if cs {
 		buf[0] |= 0x01
 	}
-	bp.term.Write(buf)
-	bp.term.Read(buf)
-	if buf[0] == 0x01 {
-		return nil
+
+	if _, err := bp.Write(buf); err != nil {
+		return err
 	}
-	return fmt.Errorf("Set SPI config bad response")
+
+	n, _ := bp.Read(buf)
+	if n == 0 || buf[0] != 0x01 {
+		return fmt.Errorf("error configuring spi peripherals")
+	}
+
+	return nil
 }
 
+// SpiSpeed is the SPI bus speed
 type SpiSpeed uint8
 
+// SpiSpeed is the SPI bus speed
 const (
 	SpiSpeed30khz SpiSpeed = iota
 	SpiSpeed125khz
@@ -171,22 +200,30 @@ const (
 	SpiSpeed8mhz
 )
 
-// 01100xxx – Set SPI speed, 30, 125, 250khz; 1, 2, 2.6, 4, 8MHz
-// 000=30kHz, 001=125kHz, 010=250kHz, 011=1MHz, 100=2MHz, 101=2.6MHz, 110=4MHz, 111=8MHz
+// SpiSpeed sets SPI bus speed.
 func (bp *BusPirate) SpiSpeed(speed SpiSpeed) error {
-	buf := []byte{0x60}
+	buf := []byte{spiSpeedCfg}
 	buf[0] |= byte(speed & 0x07)
-	bp.term.Write(buf)
-	bp.term.Read(buf)
-	if buf[0] == 0x01 {
-		return nil
+	if _, err := bp.Write(buf); err != nil {
+		return err
 	}
-	return fmt.Errorf("Set SPI speed bad response")
+	n, _ := bp.Read(buf)
+	if n == 0 || buf[0] != 0x01 {
+		return fmt.Errorf("error setting the SPI speed")
+	}
+
+	return nil
 }
 
+// SpiCfg configures the SPI bus.
 // 1000wxyz – SPI config, w=output type, x=idle, y=clock edge, z=sample
-func (bp *BusPirate) SpiConfigure2(output33v, idle, edge, sample bool) error {
-	buf := []byte{0x80}
+// The CKP and CKE bits determine, on which edge of the clock, data transmission occurs.
+// w= pin output HiZ(0)/3.3v(1)
+// x=CKP clock idle phase (low=0)
+// y=CKE clock edge (active to idle=1)
+// z=SMP sample time (middle=0)
+func (bp *BusPirate) SpiCfg(output33v, idle, edge, sample bool) error {
+	buf := []byte{spiCfg}
 	if output33v {
 		buf[0] |= 0x08
 	}
@@ -199,19 +236,108 @@ func (bp *BusPirate) SpiConfigure2(output33v, idle, edge, sample bool) error {
 	if sample {
 		buf[0] |= 0x01
 	}
-	bp.term.Write(buf)
-	bp.term.Read(buf)
-	if buf[0] == 0x01 {
-		return nil
+
+	if _, err := bp.Write(buf); err != nil {
+		return err
 	}
-	return fmt.Errorf("Set SPI config2 bad response")
+
+	n, _ := bp.Read(buf)
+	if n == 0 || buf[0] != 0x01 {
+		return fmt.Errorf("error configuring the SPI settings")
+	}
+
+	return nil
 }
 
-func clamp(v *float64, lower, upper float64) {
-	if *v < lower {
-		*v = lower
+// SpiSend sends from 1 to 16 bytes to the SPI device. Reads a byte
+// for each byte sent.
+func (bp *BusPirate) SpiSend(data []byte) ([]byte, error) {
+	// send cmd and read reply
+	// send 1 - 16 bytes reading a reply byte after each send
+	l := len(data)
+	if l < 1 || l > 16 {
+		return nil, fmt.Errorf("error, length must be between 1 and 16 bytes")
+
 	}
-	if *v > upper {
-		*v = upper
+
+	buf := []byte{spiBulkTransferMode | byte(l-1)}
+	if _, err := bp.Write(buf); err != nil {
+		return nil, err
 	}
+
+	n, _ := bp.Read(buf)
+	if n == 0 || buf[0] != 0x01 {
+		return nil, fmt.Errorf("error setting send cmd mode")
+	}
+
+	out := make([]byte, l)
+	for i := 0; i < l; i++ {
+		if _, err := bp.Write(data[i : i+1]); err != nil {
+			return nil, err
+		}
+
+		if n, _ := bp.Read(out[i : i+1]); n == 0 {
+			return nil, fmt.Errorf("error reading byte send reply")
+		}
+	}
+
+	return out, nil
+}
+
+// SpiWriteRead writes 0-4096 bytes and/or reads 0-4096 bytes.
+func (bp *BusPirate) SpiWriteRead(outData, inData []byte) error {
+	// write send count
+	// write receive count
+	//  if any, write out data
+	// read status byte
+	// if any, read in data
+	outCnt := len(outData)
+	if outCnt < 0 || outCnt > 4096 {
+		return fmt.Errorf("error, invalid out data count (0-4096 bytes)")
+	}
+
+	inCnt := len(inData)
+	if inCnt < 0 || inCnt > 4096 {
+		return fmt.Errorf("error, invalid in data count (0-4096 bytes)")
+	}
+
+	// send the ReadWrite command
+	buf := []byte{spiWriteReadCmd, 0}
+	if _, err := bp.Write(buf[:1]); err != nil {
+		return err
+	}
+
+	// out data count
+	buf[1] = byte(outCnt)
+	buf[0] = byte(outCnt >> 8)
+	if _, err := bp.Write(buf); err != nil {
+		return err
+	}
+
+	// in data count
+	buf[1] = byte(inCnt)
+	buf[0] = byte(inCnt >> 8)
+	if _, err := bp.Write(buf); err != nil {
+		return err
+	}
+
+	if _, err := bp.Write(outData); err != nil {
+		return err
+	}
+
+	// check status
+	n, _ := bp.Read(buf[:1])
+	if n == 0 || buf[0] != 1 {
+		return fmt.Errorf("error with write/read operation")
+	}
+
+	// in data
+	if inCnt > 0 {
+		n, _ := bp.Read(inData)
+		if n == 0 {
+			return fmt.Errorf("error with write/read operation")
+		}
+	}
+
+	return nil
 }
