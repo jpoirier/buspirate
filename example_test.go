@@ -1,9 +1,9 @@
 package buspirate
 
 import (
-    import "time"
+    "time"
 
-    import "github.com/jpoirier/buspirate"
+    "github.com/jpoirier/buspirate"
 )
 // Pulse a LED connected to the AUX pin.
 func ExampleBusPirate_SetPWM() {
