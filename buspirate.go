@@ -8,7 +8,7 @@ import (
 
 // Open opens a connection to a BusPirate module and places it into binary mode.
 func Open(dev string) (*BusPirate, error) {
-	term, err := lsport.Open("/dev/ttyUSB0")
+	term, err := lsport.Open(dev)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func (bp *BusPirate) enterBinaryMode() error {
 		if err := bp.Drain(); err != nil {
 			return err
 		}
-		if n, err := bp.BlockingRead(buf, 500); n == 0 || err != nil {
+		if n, err := bp.BlockingRead(buf, 10); n == 0 || err != nil {
 			continue
 		}
 		if string(buf) == "BBIO1" {
@@ -375,6 +375,7 @@ func (bp *BusPirate) SpiWriteRead(outData, inData []byte) error {
 
 	// in data
 	if inCnt > 0 {
+		// TODO: proper time for make 4096 bits
 		if n, err := bp.BlockingRead(inData, 60*1000); n != inCnt || err != nil {
 			return fmt.Errorf("error with write/read operation")
 		}
