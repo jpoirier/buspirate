@@ -54,6 +54,7 @@ func main() {
 	fmt.Println("spi cfg done")
 
 	//---
+	//
 	fmt.Println("calling SpiSend...")
 	out := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 
@@ -76,9 +77,10 @@ func main() {
 	}
 
 	fmt.Println(r)
-	time.Sleep(2000 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 
 	// ---
+	//
 	fmt.Println("sending block mode command...")
 	err = bp.SpiCS(false)
 	if err != nil {
@@ -100,7 +102,7 @@ func main() {
 	}
 
 	fmt.Println(r)
-	time.Sleep(2000 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 
 	// ---
 	fmt.Println("sending sending/reading data block...")
@@ -115,8 +117,5 @@ func main() {
 		return
 	}
 
-	fmt.Println(in)
-
-	fmt.Println("bye...")
-
+	fmt.Println("\nbye...")
 }

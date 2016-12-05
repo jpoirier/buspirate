@@ -15,5 +15,7 @@ _testmain.go
 *.prof
 
 archives
+misc
 .vscode
+.idea
 main

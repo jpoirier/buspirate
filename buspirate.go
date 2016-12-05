@@ -25,8 +25,7 @@ type BusPirate struct {
 // http://dangerousprototypes.com/docs/Bitbang
 func (bp *BusPirate) enterBinaryMode() error {
 	bp.Flush(lsport.BufBoth)
-	buf := make([]byte, 5)
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 20; i++ {
 		// send binary reset
 		if n, err := bp.Write([]byte{0x00}); n == 0 || err != nil {
 			return fmt.Errorf("error writing binary mode command")
@@ -37,6 +36,7 @@ func (bp *BusPirate) enterBinaryMode() error {
 		if n, err := bp.BlockingRead(buf, 10); n == 0 || err != nil {
 			continue
 		}
+		buf := make([]byte, n)
 		if string(buf) == "BBIO1" {
 			return nil
 		}
