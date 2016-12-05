@@ -67,7 +67,7 @@ void loop() {
         if (rx == 0xFF) {
           Serial.println("going in to block receive mode...");
           block_rcv_mode = true;
-          delay(500)
+          delay(500);
         }
       } else {
         spi_transfer_block();
@@ -80,7 +80,7 @@ void loop() {
         }
         Serial.println("finished spi_transfer_block...");
         block_rcv_mode = false;
-        delay(500)
+        delay(500);
       }
       cnt += 1;
   }

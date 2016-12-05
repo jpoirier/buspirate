@@ -23,7 +23,7 @@ type BusPirate struct {
 
 func (bp *BusPirate) enterBinaryMode() error {
 	bp.Flush(lsport.BufBoth)
-	buf := make([]byte, 4)
+	buf := make([]byte, 5)
 	for i := 0; i < 20; i++ {
 		// send binary reset
 		if n, err := bp.Write([]byte{0x00}); n == 0 || err != nil {
