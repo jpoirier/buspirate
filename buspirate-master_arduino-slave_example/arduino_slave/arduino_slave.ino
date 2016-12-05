@@ -47,7 +47,7 @@ void spi_transfer_block(void) {
     while (!(SPSR & (1<<SPIF)));
     inBuf[i] = SPDR;
   }
-  for (int i = 100; i < 201; i++) {
+  for (int i = 100; i < 200; i++) {
     SPDR = (byte)i;
     while(!(SPSR & (1<<SPIF)));
   }
@@ -71,6 +71,7 @@ void loop() {
         }
       } else {
         spi_transfer_block();
+        Serial.print("xxx");
         for (int i = 0; i < 5; i++) {
           for (int j = 0; j < 20; j++) {
             Serial.print(inBuf[i*20+j], DEC);
