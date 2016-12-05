@@ -24,7 +24,7 @@ type BusPirate struct {
 func (bp *BusPirate) enterBinaryMode() error {
 	bp.Flush(lsport.BufBoth)
 	buf := make([]byte, 5)
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 30; i++ {
 		// send binary reset
 		if n, err := bp.Write([]byte{0x00}); n == 0 || err != nil {
 			return fmt.Errorf("error writing binary mode command")
@@ -374,7 +374,7 @@ func (bp *BusPirate) SpiWriteRead(outData, inData []byte) error {
 	// in data
 	if inCnt > 0 {
 		// TODO: proper time for make 4096 bits
-		if n, err := bp.BlockingRead(inData, 60*1000); n != inCnt || err != nil {
+		if n, err := bp.BlockingRead(inData, 60*1000); n < inCnt || err != nil {
 			return fmt.Errorf("error with write/read operation")
 		}
 	}

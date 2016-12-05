@@ -47,8 +47,8 @@ void spi_transfer_block(void) {
     while (!(SPSR & (1<<SPIF)));
     inBuf[i] = SPDR;
   }
-  for (byte i = 100; i < 200; i++) {
-    SPDR = i;
+  for (int i = 100; i < 201; i++) {
+    SPDR = (byte)i;
     while(!(SPSR & (1<<SPIF)));
   }
 }

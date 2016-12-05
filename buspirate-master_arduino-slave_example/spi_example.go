@@ -63,6 +63,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	time.Sleep(1000 * time.Millisecond)
 
 	r, err := bp.SpiSend(out)
 	if err != nil {
@@ -75,9 +76,9 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	time.Sleep(1000 * time.Millisecond)
 
 	fmt.Println(r)
-	time.Sleep(1000 * time.Millisecond)
 
 	// ---
 	//
@@ -87,6 +88,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	time.Sleep(1000 * time.Millisecond)
 
 	// spi slave cmd for block mode
 	r, err = bp.SpiSend([]byte{0xff})
@@ -100,22 +102,23 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-
-	fmt.Println(r)
 	time.Sleep(1000 * time.Millisecond)
+	fmt.Println(r)
 
 	// ---
 	fmt.Println("sending sending/reading data block...")
-	out2 := make([]byte, 100)
-	for i := 0; i < 100; i++ {
-		out2[i] = byte(i + 1)
-	}
 	in := make([]byte, 100)
+	out = make([]byte, 100)
+	for i := 0; i < 100; i++ {
+		out[i] = byte(i + 1)
+	}
 
-	if err := bp.SpiWriteRead(out2, in); err != nil {
+	if err := bp.SpiWriteRead(out, in); err != nil {
 		fmt.Println(err)
 		return
 	}
+
+	fmt.Println(in)
 
 	fmt.Println("\nbye...")
 }
