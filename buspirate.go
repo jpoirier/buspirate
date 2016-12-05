@@ -6,7 +6,7 @@ import (
 	"github.com/jpoirier/lsport"
 )
 
-// Open opens a connection to a BusPirate module and places it into binary mode.
+// Open opens a connection to a BusPirate module and places it in binary mode.
 func Open(dev string) (*BusPirate, error) {
 	term, err := lsport.Open(dev)
 	if err != nil {
@@ -21,10 +21,9 @@ type BusPirate struct {
 	*lsport.Term
 }
 
-// enterBinaryMode resets the BusPirate and enters binary mode.
-// http://dangerousprototypes.com/docs/Bitbang
 func (bp *BusPirate) enterBinaryMode() error {
 	bp.Flush(lsport.BufBoth)
+	buf := make([]byte, 4)
 	for i := 0; i < 20; i++ {
 		// send binary reset
 		if n, err := bp.Write([]byte{0x00}); n == 0 || err != nil {
@@ -36,7 +35,6 @@ func (bp *BusPirate) enterBinaryMode() error {
 		if n, err := bp.BlockingRead(buf, 10); n == 0 || err != nil {
 			continue
 		}
-		buf := make([]byte, n)
 		if string(buf) == "BBIO1" {
 			return nil
 		}
