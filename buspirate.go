@@ -116,6 +116,7 @@ func (bp *BusPirate) enterBinaryMode() error {
 	return fmt.Errorf("error, could not enter binary mode")
 }
 
+// CloseTerm closes the terminal connection to the Bus Pirate device.
 func (bp *BusPirate) CloseTerm() error {
 	return bp.Close()
 }
