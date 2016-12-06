@@ -10,7 +10,7 @@ byte inBuf[100];
 
 void setup(void) {
   Serial.begin(115200);
-  Serial.println("Configuring the SPI interface for salve mode...");
+  Serial.println("Configuring the SPI interface for slave mode...");
 
   pinMode(MOSI, INPUT);
   pinMode(MISO, OUTPUT);

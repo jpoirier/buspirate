@@ -6,19 +6,93 @@ import (
 	"github.com/jpoirier/lsport"
 )
 
+// BusPirate represents a connection to a remote Bus Pirate device.
+type BusPirate struct {
+	*lsport.Term
+}
+
+// v3/v4 detection
+// TODO: return proper error when n == 0
+
 // Open opens a connection to a BusPirate module and places it in binary mode.
 func Open(dev string) (*BusPirate, error) {
-	term, err := lsport.Open(dev)
+	term, err := lsport.Open(dev, 115200)
 	if err != nil {
 		return nil, err
 	}
+
+	err = setBaudrate(term)
+	if err != nil {
+		return nil, err
+	}
+
+	err = term.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	term, err = lsport.Open(dev, 2000000)
+	if err != nil {
+		return nil, err
+	}
+
 	bp := BusPirate{term}
 	return &bp, bp.enterBinaryMode()
 }
 
-// BusPirate represents a connection to a remote BusPirate device.
-type BusPirate struct {
-	*lsport.Term
+func setBaudrate(term *lsport.Term) error {
+	// BRG : baudrate
+	//   1 : 2000000
+	//   3 : 1000000
+	//   4 :  800000
+	//   7 :  500000
+	//   9 :  400000
+
+	// baudrate mode
+	if n, err := term.Write([]byte{'b'}); n == 0 || err != nil {
+		return fmt.Errorf("error writing baudrate command")
+	}
+	if err := term.Drain(); err != nil {
+		return err
+	}
+	reply := make([]byte, len(baudReply))
+	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
+		return err
+	}
+	if string(reply) != baudReply {
+		return fmt.Errorf("error writing baudrate command")
+	}
+
+	// brg mode
+	if n, err := term.Write([]byte("10")); n == 0 || err != nil {
+		return fmt.Errorf("error writing brg command")
+	}
+	if err := term.Drain(); err != nil {
+		return err
+	}
+	reply = make([]byte, len(brgReply))
+	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
+		return err
+	}
+	if string(reply) != brgReply {
+		return fmt.Errorf("error writing brg command")
+	}
+
+	// brg value
+	if n, err := term.Write([]byte{'1'}); n == 0 || err != nil {
+		return fmt.Errorf("error writing brg value")
+	}
+	if err := term.Drain(); err != nil {
+		return err
+	}
+	reply = make([]byte, len(brgValReply))
+	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
+		return err
+	}
+	if string(reply) != brgValReply {
+		return fmt.Errorf("error writing brg value")
+	}
+	return nil
 }
 
 func (bp *BusPirate) enterBinaryMode() error {
@@ -40,6 +114,10 @@ func (bp *BusPirate) enterBinaryMode() error {
 		}
 	}
 	return fmt.Errorf("error, could not enter binary mode")
+}
+
+func (bp *BusPirate) CloseTerm() error {
+	return bp.Close()
 }
 
 // LeaveBinaryMode exits binary mode.
