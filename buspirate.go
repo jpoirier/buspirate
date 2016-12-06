@@ -2,6 +2,7 @@ package buspirate
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/jpoirier/lsport"
 )
@@ -11,36 +12,49 @@ type BusPirate struct {
 	*lsport.Term
 }
 
-// v3/v4 detection
+var resetBaudrate int
+
+func init() {
+	if runtime.GOOS == "windows" {
+		baudRate = 1000000
+	} else if runtime.GOOS == "linux" {
+		baudRate = 2000000
+	}
+}
+
+// bp v3/v4 detection
 // TODO: return proper error when n == 0
 
 // Open opens a connection to a BusPirate module and places it in binary mode.
 func Open(dev string) (*BusPirate, error) {
+	// the bp's default baud rate is 115200 at reboot
 	term, err := lsport.Open(dev, 115200)
 	if err != nil {
 		return nil, err
 	}
 
-	err = setBaudrate(term)
-	if err != nil {
-		return nil, err
-	}
+	if resetBaudrate != 0 {
+		err = resetBPBaudrate(term)
+		if err != nil {
+			return nil, err
+		}
 
-	err = term.Close()
-	if err != nil {
-		return nil, err
-	}
+		err = term.Close()
+		if err != nil {
+			return nil, err
+		}
 
-	term, err = lsport.Open(dev, 2000000)
-	if err != nil {
-		return nil, err
+		term, err = lsport.Open(dev, resetBaudrate)
+		if err != nil {
+			return nil, err
+		}
 	}
-
 	bp := BusPirate{term}
 	return &bp, bp.enterBinaryMode()
 }
 
-func setBaudrate(term *lsport.Term) error {
+// resetBPBaudrate resets (non-volatile) the Bus Pirate's baud rate.
+func resetBPBaudrate(term *lsport.Term) error {
 	// BRG : baudrate
 	//   1 : 2000000
 	//   3 : 1000000
