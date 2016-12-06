@@ -16,9 +16,9 @@ var resetBaudrate int
 
 func init() {
 	if runtime.GOOS == "windows" {
-		baudRate = 1000000
+		resetBaudrate = 1000000
 	} else if runtime.GOOS == "linux" {
-		baudRate = 2000000
+		resetBaudrate = 2000000
 	}
 }
 
