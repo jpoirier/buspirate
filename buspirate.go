@@ -2,7 +2,6 @@ package buspirate
 
 import (
 	"fmt"
-	"runtime"
 
 	"github.com/jpoirier/lsport"
 )
@@ -12,39 +11,27 @@ type BusPirate struct {
 	*lsport.Term
 }
 
-var resetBaudrate int
-
-func init() {
-	if runtime.GOOS == "windows" {
-		resetBaudrate = 1000000
-	} else if runtime.GOOS == "linux" {
-		resetBaudrate = 2000000
-	}
-}
-
 // bp v3/v4 detection
 // TODO: return proper error when n == 0
 
 // Open opens a connection to a BusPirate module and places it in binary mode.
-func Open(dev string) (*BusPirate, error) {
-	// the bp's default baud rate is 115200 at reboot
+func Open(dev string, baudrate int) (*BusPirate, error) {
+	// the bp's default baud rate is 115200 at boot-up
 	term, err := lsport.Open(dev, 115200)
 	if err != nil {
 		return nil, err
 	}
 
-	if resetBaudrate != 0 {
-		err = resetBPBaudrate(term)
+	if baudrate != 115200 {
+		err = resetBPBaudrate(term, baudrate)
 		if err != nil {
 			return nil, err
 		}
-
 		err = term.Close()
 		if err != nil {
 			return nil, err
 		}
-
-		term, err = lsport.Open(dev, resetBaudrate)
+		term, err = lsport.Open(dev, baudrate)
 		if err != nil {
 			return nil, err
 		}
@@ -54,14 +41,19 @@ func Open(dev string) (*BusPirate, error) {
 }
 
 // resetBPBaudrate resets (non-volatile) the Bus Pirate's baud rate.
-func resetBPBaudrate(term *lsport.Term) error {
-	// BRG : baudrate
-	//   1 : 2000000
-	//   3 : 1000000
-	//   4 :  800000
-	//   7 :  500000
-	//   9 :  400000
+func resetBPBaudrate(term *lsport.Term, buadrate int) error {
+	var brg byte
+	switch buadrate {
+	case 500000:
+		brg = 0x37
+	case 1000000:
+		brg = 0x33
+	case 2000000:
+		brg = 0x31
+	default:
+		return fmt.Errorf("error, invalid reset baudrate: %d, must be 5000000|1000000|5000000", buadrate)
 
+	}
 	// baudrate mode
 	if n, err := term.Write([]byte{'b'}); n == 0 || err != nil {
 		return fmt.Errorf("error writing baudrate command")
@@ -93,7 +85,7 @@ func resetBPBaudrate(term *lsport.Term) error {
 	}
 
 	// brg value
-	if n, err := term.Write([]byte{'1'}); n == 0 || err != nil {
+	if n, err := term.Write([]byte{brg}); n == 0 || err != nil {
 		return fmt.Errorf("error writing brg value")
 	}
 	if err := term.Drain(); err != nil {
