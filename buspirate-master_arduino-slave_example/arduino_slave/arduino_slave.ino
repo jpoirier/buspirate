@@ -71,7 +71,6 @@ void loop() {
         }
       } else {
         spi_transfer_block();
-        Serial.print("xxx");
         for (int i = 0; i < 5; i++) {
           for (int j = 0; j < 20; j++) {
             Serial.print(inBuf[i*20+j], DEC);

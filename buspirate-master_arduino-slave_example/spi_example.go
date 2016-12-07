@@ -37,7 +37,6 @@ func main() {
 		return
 	}
 
-	defer bp.CloseTerm()
 	defer bp.LeaveBinaryMode()
 	fmt.Println("serial port is open")
 
