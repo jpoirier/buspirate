@@ -2,6 +2,8 @@ package buspirate
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/jpoirier/lsport"
 )
@@ -21,20 +23,20 @@ func Open(dev string, baudrate int) (*BusPirate, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	if baudrate != 115200 {
 		err = resetBPBaudrate(term, baudrate)
 		if err != nil {
 			return nil, err
 		}
-		err = term.Close()
+		err = term.SetBaudrate(baudrate)
 		if err != nil {
 			return nil, err
 		}
-		term, err = lsport.Open(dev, baudrate)
-		if err != nil {
-			return nil, err
-		}
+		time.Sleep(10 * time.Millisecond)
+
+		reply := make([]byte, 20)
+		term.Write([]byte{0x20}) // space character to confirm the baud rate change
+		term.BlockingRead(reply, 10)
 	}
 	bp := BusPirate{term}
 	return &bp, bp.enterBinaryMode()
@@ -42,71 +44,74 @@ func Open(dev string, baudrate int) (*BusPirate, error) {
 
 // resetBPBaudrate resets (non-volatile) the Bus Pirate's baud rate.
 func resetBPBaudrate(term *lsport.Term, buadrate int) error {
-	var brg byte
+	var brg string
 	switch buadrate {
 	case 500000:
-		brg = 0x37
+		brg = "7\n"
 	case 1000000:
-		brg = 0x33
+		brg = "3\n"
 	case 2000000:
-		brg = 0x31
+		brg = "1\n"
 	default:
 		return fmt.Errorf("error, invalid reset baudrate: %d, must be 5000000|1000000|5000000", buadrate)
 
 	}
 	// baudrate mode
-	if n, err := term.Write([]byte{'b'}); n == 0 || err != nil {
-		return fmt.Errorf("error writing baudrate command")
+	if n, err := term.Write([]byte("b\n")); n == 0 || err != nil {
+		return fmt.Errorf("1. error writing baudrate command")
 	}
 	if err := term.Drain(); err != nil {
 		return err
 	}
-	reply := make([]byte, len(baudReply))
+	reply := make([]byte, len(baudReply)+10)
 	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
 		return err
 	}
-	if string(reply) != baudReply {
-		return fmt.Errorf("error writing baudrate command")
+	if !strings.Contains(string(reply), baudReply) {
+		return fmt.Errorf("error reading baudrate command reply")
 	}
 
 	// brg mode
-	if n, err := term.Write([]byte("10")); n == 0 || err != nil {
+	if n, err := term.Write([]byte("10\n")); n == 0 || err != nil {
 		return fmt.Errorf("error writing brg command")
 	}
 	if err := term.Drain(); err != nil {
 		return err
 	}
-	reply = make([]byte, len(brgReply))
+	reply = make([]byte, len(brgReply)+10)
 	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
 		return err
 	}
-	if string(reply) != brgReply {
-		return fmt.Errorf("error writing brg command")
+	if !strings.Contains(string(reply), brgReply) {
+		return fmt.Errorf("error reading brg command reply")
 	}
 
 	// brg value
-	if n, err := term.Write([]byte{brg}); n == 0 || err != nil {
+	if n, err := term.Write([]byte(brg)); n == 0 || err != nil {
 		return fmt.Errorf("error writing brg value")
 	}
 	if err := term.Drain(); err != nil {
 		return err
 	}
-	reply = make([]byte, len(brgValReply))
+	reply = make([]byte, len(brgValReply)+10)
 	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
 		return err
 	}
-	if string(reply) != brgValReply {
-		return fmt.Errorf("error writing brg value")
+	if !strings.Contains(string(reply), brgValReply) {
+		return fmt.Errorf("error reading brg value reply")
 	}
+
 	return nil
 }
 
 func (bp *BusPirate) enterBinaryMode() error {
+	bp.Write([]byte{'\n', '\n', '\n'})
 	bp.Flush(lsport.BufBoth)
 	buf := make([]byte, 5)
 	for i := 0; i < 30; i++ {
 		// send binary reset
 		if n, err := bp.Write([]byte{0x00}); n == 0 || err != nil {
+			fmt.Printf("n value: %d\n", n)
 			return fmt.Errorf("error writing binary mode command")
 		}
 		if err := bp.Drain(); err != nil {
