@@ -10,14 +10,27 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/jpoirier/buspirate"
 )
 
+var baudrate int
+
+func init() {
+	if runtime.GOOS == "linux" {
+		baudrate = 2000000
+	} else if runtime.GOOS == "windows" {
+		baudrate = 1000000
+	} else {
+		baudrate = 115200
+	}
+}
+
 func main() {
 	fmt.Println("opening bp...")
-	bp, err := buspirate.Open("/dev/ttyUSB0")
+	bp, err := buspirate.Open("/dev/ttyUSB0", baudrate)
 	// bp, err := buspirate.Open("/dev/ttyUSB0", 5*time.Second)
 	if err != nil {
 		fmt.Println(err)
