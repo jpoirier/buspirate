@@ -13,8 +13,7 @@ type BusPirate struct {
 	*lsport.Term
 }
 
-// bp v3/v4 detection
-// TODO: return proper error when n == 0
+// TODO: bp v3/v4 detection
 
 // Open opens a connection to a BusPirate module and places it in binary mode.
 func Open(dev string, baudrate int) (*BusPirate, error) {
@@ -58,47 +57,47 @@ func resetBPBaudrate(term *lsport.Term, buadrate int) error {
 	}
 	// baudrate mode
 	if n, err := term.Write([]byte("b\n")); n == 0 || err != nil {
-		return fmt.Errorf("1. error writing baudrate command")
+		return fmt.Errorf("error writing baudrate command, n: %d, %v", n, err)
 	}
 	if err := term.Drain(); err != nil {
 		return err
 	}
 	reply := make([]byte, len(baudReply)+10)
 	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error reading baudrate command reply, n: %d, %v", n, err)
 	}
 	if !strings.Contains(string(reply), baudReply) {
-		return fmt.Errorf("error reading baudrate command reply")
+		return fmt.Errorf("error, baudrate command reply is invalid")
 	}
 
 	// brg mode
 	if n, err := term.Write([]byte("10\n")); n == 0 || err != nil {
-		return fmt.Errorf("error writing brg command")
+		return fmt.Errorf("error writing brg command, n: %d, %v", n, err)
 	}
 	if err := term.Drain(); err != nil {
 		return err
 	}
 	reply = make([]byte, len(brgReply)+10)
 	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error reading brg command reply, n: %d, %v", n, err)
 	}
 	if !strings.Contains(string(reply), brgReply) {
-		return fmt.Errorf("error reading brg command reply")
+		return fmt.Errorf("error, brg command reply is invalid")
 	}
 
 	// brg value
 	if n, err := term.Write([]byte(brg)); n == 0 || err != nil {
-		return fmt.Errorf("error writing brg value")
+		return fmt.Errorf("error writing brg value, n: %d, %v", n, err)
 	}
 	if err := term.Drain(); err != nil {
 		return err
 	}
 	reply = make([]byte, len(brgValReply)+10)
 	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error reading brg value reply, n: %d, %v", n, err)
 	}
 	if !strings.Contains(string(reply), brgValReply) {
-		return fmt.Errorf("error reading brg value reply")
+		return fmt.Errorf("error, brg value reply is invalid")
 	}
 
 	return nil
@@ -111,8 +110,7 @@ func (bp *BusPirate) enterBinaryMode() error {
 	for i := 0; i < 30; i++ {
 		// send binary reset
 		if n, err := bp.Write([]byte{0x00}); n == 0 || err != nil {
-			fmt.Printf("n value: %d\n", n)
-			return fmt.Errorf("error writing binary mode command")
+			return fmt.Errorf("error writing binary mode command, n: %d, %v", n, err)
 		}
 		if err := bp.Drain(); err != nil {
 			return err
@@ -135,7 +133,7 @@ func (bp *BusPirate) CloseTerm() error {
 // LeaveBinaryMode exits binary mode.
 func (bp *BusPirate) LeaveBinaryMode() error {
 	if n, err := bp.BlockingWrite([]byte{0x0F}, 2000); n == 0 || err != nil {
-		return fmt.Errorf("error, could not leave binary mode")
+		return fmt.Errorf("error leaving binary mode, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
@@ -150,13 +148,13 @@ func (bp *BusPirate) LeaveBinaryMode() error {
 func (bp *BusPirate) PowerOn() error {
 	buf := []byte{0xC0}
 	if n, err := bp.BlockingWrite(buf, 2000); n == 0 || err != nil {
-		return fmt.Errorf("error turning power on")
+		return fmt.Errorf("error turning power on, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
 	}
 	if n, err := bp.BlockingRead(buf, 2000); n == 0 || err != nil {
-		return fmt.Errorf("error turning power on")
+		return fmt.Errorf("error turning power on reply, n: %d, %v", n, err)
 	}
 	return nil
 }
@@ -165,13 +163,13 @@ func (bp *BusPirate) PowerOn() error {
 func (bp *BusPirate) PowerOff() error {
 	buf := []byte{0x80}
 	if n, err := bp.BlockingWrite(buf, 2000); n == 0 || err != nil {
-		return fmt.Errorf("error turning power off")
+		return fmt.Errorf("error turning power off, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
 	}
 	if n, err := bp.BlockingRead(buf, 2000); n == 0 || err != nil {
-		return fmt.Errorf("error turning power off")
+		return fmt.Errorf("error turning power off reply, n: %d, %v", n, err)
 	}
 	return nil
 }
@@ -184,13 +182,13 @@ func (bp *BusPirate) SetPWM(duty float64) error {
 	OCR := uint16(float64(PRy) * duty)
 	buf := []byte{0x12, 0x00, uint8(OCR >> 8), uint8(OCR), uint8(PRy >> 8), uint8(PRy)}
 	if n, err := bp.BlockingWrite(buf, 2000); n == 0 || err != nil {
-		return fmt.Errorf("error setting pwm")
+		return fmt.Errorf("error setting pwm, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
 	}
 	if n, err := bp.BlockingRead(buf[:1], 2000); n == 0 || err != nil {
-		return fmt.Errorf("error setting pwm")
+		return fmt.Errorf("error setting pwm reply, n: %d, %v", n, err)
 	}
 	return nil
 }
@@ -219,15 +217,14 @@ const (
 // SpiEnter enters binary SPI mode.
 func (bp *BusPirate) SpiEnter() error {
 	if n, err := bp.BlockingWrite([]byte{spiRawMode}, 2000); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error writing enter spi mode, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
 	}
 	reply := make([]byte, 4)
-	_, err := bp.BlockingRead(reply, 2000)
-	if err != nil || string(reply) != "SPI1" {
-		return fmt.Errorf("error entering SPI mode")
+	if n, err := bp.BlockingRead(reply, 2000); err != nil || string(reply) != "SPI1" {
+		return fmt.Errorf("error reading enter spi mode, n: %d, %v", n, err)
 	}
 	return nil
 }
@@ -235,7 +232,7 @@ func (bp *BusPirate) SpiEnter() error {
 // SpiLeave exits SPI mode, returning to bitbang mode.
 func (bp *BusPirate) SpiLeave() error {
 	if n, err := bp.BlockingWrite([]byte{resetBitbangMode}, 2000); n == 0 || err != nil {
-		return nil
+		return fmt.Errorf("error writing leave spi mode, n: %d, %v", n, err)
 	}
 	bp.Drain()
 	return nil
@@ -251,16 +248,14 @@ func (bp *BusPirate) SpiCS(high bool) error {
 		buf[0] |= 0x01
 	}
 	if n, err := bp.BlockingWrite(buf, 2000); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error writing set spi cs, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
 	}
-
 	if n, err := bp.BlockingRead(buf, 2000); n == 0 || err != nil || buf[0] != 0x01 {
-		return fmt.Errorf("error setting chip select state")
+		return fmt.Errorf("error reading set spi cs reply, n: %d, %v", n, err)
 	}
-
 	return nil
 }
 
@@ -280,18 +275,15 @@ func (bp *BusPirate) SpiCfgPeriph(power, pullups, aux, cs bool) error {
 	if cs {
 		buf[0] |= 0x01
 	}
-
 	if n, err := bp.BlockingWrite(buf, 2000); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error writing spi periph cfg, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
 	}
-
 	if n, err := bp.BlockingRead(buf, 2000); n == 0 || err != nil || buf[0] != 0x01 {
-		return fmt.Errorf("error configuring spi peripherals")
+		return fmt.Errorf("error reading spi periph cfg reply, n: %d, %v", n, err)
 	}
-
 	return nil
 }
 
@@ -315,16 +307,14 @@ func (bp *BusPirate) SpiSpeed(speed SpiSpeed) error {
 	buf := []byte{spiSpeedCfg}
 	buf[0] |= byte(speed & 0x07)
 	if n, err := bp.BlockingWrite(buf, 2000); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error writing spi speed, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
 	}
-
 	if n, err := bp.BlockingRead(buf, 2000); n == 0 || err != nil || buf[0] != 0x01 {
-		return fmt.Errorf("error setting the SPI speed")
+		return fmt.Errorf("error reading spi speed reply, n: %d, %v", n, err)
 	}
-
 	return nil
 }
 
@@ -349,18 +339,15 @@ func (bp *BusPirate) SpiCfg(output33v, idle, edge, sample bool) error {
 	if sample {
 		buf[0] |= 0x01
 	}
-
 	if n, err := bp.BlockingWrite(buf, 2000); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error writing spi cfg, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
 	}
-
 	if n, err := bp.BlockingRead(buf, 2000); n == 0 || err != nil || buf[0] != 0x01 {
-		return fmt.Errorf("error configuring the SPI settings")
+		return fmt.Errorf("error reading spi cfg reply, n: %d, %v", n, err)
 	}
-
 	return nil
 }
 
@@ -371,35 +358,32 @@ func (bp *BusPirate) SpiSend(data []byte) ([]byte, error) {
 	// send 1 - 16 bytes reading a reply byte after each send
 	l := len(data)
 	if l < 1 || l > 16 {
-		return nil, fmt.Errorf("error, length must be between 1 and 16 bytes")
+		return nil, fmt.Errorf("error, spi send length must be between 1 and 16 bytes")
 	}
 
 	buf := []byte{spiBulkTransferMode | byte(l-1)}
 	if n, err := bp.BlockingWrite(buf, 2000); n == 0 || err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error writing bulk transfer mode, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return nil, err
 	}
-
 	if n, err := bp.BlockingRead(buf, 2000); n == 0 || err != nil || buf[0] != 0x01 {
-		return nil, fmt.Errorf("error setting send cmd mode")
+		return nil, fmt.Errorf("error reading bulk transfer mode reply, n: %d, %v", n, err)
 	}
 
 	out := make([]byte, l)
 	for i := 0; i < l; i++ {
 		if n, err := bp.BlockingWrite(data[i:i+1], 2000); n == 0 || err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error writing bulk transfer data, n: %d, %v", n, err)
 		}
 		if err := bp.Drain(); err != nil {
 			return nil, err
 		}
-
 		if n, err := bp.BlockingRead(out[i:i+1], 2000); n == 0 || err != nil {
-			return nil, fmt.Errorf("error reading byte send reply")
+			return nil, fmt.Errorf("error reading bulk transfer data reply, n: %d, %v", n, err)
 		}
 	}
-
 	return out, nil
 }
 
@@ -412,18 +396,18 @@ func (bp *BusPirate) SpiWriteRead(outData, inData []byte) error {
 	// if any, read in data
 	outCnt := len(outData)
 	if outCnt < 0 || outCnt > 4096 {
-		return fmt.Errorf("error, invalid out data count (0-4096 bytes)")
+		return fmt.Errorf("error, spi read/write out-data count (0-4096 bytes)")
 	}
 
 	inCnt := len(inData)
 	if inCnt < 0 || inCnt > 4096 {
-		return fmt.Errorf("error, invalid in data count (0-4096 bytes)")
+		return fmt.Errorf("error, spi read/write in-data count (0-4096 bytes)")
 	}
 
 	// send the ReadWrite command
 	buf := []byte{spiWriteReadCmd, 0}
 	if n, err := bp.BlockingWrite(buf[:1], 2000); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error, spi read/write in-data count (0-4096 bytes)")
 	}
 	if err := bp.Drain(); err != nil {
 		return err
@@ -433,39 +417,35 @@ func (bp *BusPirate) SpiWriteRead(outData, inData []byte) error {
 	buf[1] = byte(outCnt)
 	buf[0] = byte(outCnt >> 8)
 	if n, err := bp.BlockingWrite(buf, 2000); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error writing out-data count, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
 	}
-
 	// in data count
 	buf[1] = byte(inCnt)
 	buf[0] = byte(inCnt >> 8)
 	if n, err := bp.BlockingWrite(buf, 2000); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error writing in-data count, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
 	}
-
 	if n, err := bp.Write(outData); n == 0 || err != nil {
-		return err
+		return fmt.Errorf("error writing out-data, n: %d, %v", n, err)
 	}
 	if err := bp.Drain(); err != nil {
 		return err
 	}
-
 	// check status
 	if n, err := bp.BlockingRead(buf[:1], 2000); n == 0 || err != nil || buf[0] != 1 {
-		return fmt.Errorf("error with write/read operation")
+		return fmt.Errorf("error out/in data status, n: %d, %v", n, err)
 	}
-
 	// in data
 	if inCnt > 0 {
 		// TODO: proper time for make 4096 bits
 		if n, err := bp.BlockingRead(inData, 60*1000); n < inCnt || err != nil {
-			return fmt.Errorf("error with write/read operation")
+			return fmt.Errorf("errorreading in-data, n: %d, %v", n, err)
 		}
 	}
 
