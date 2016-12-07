@@ -391,9 +391,9 @@ func (bp *BusPirate) SpiSend(data []byte) ([]byte, error) {
 func (bp *BusPirate) SpiWriteRead(outData, inData []byte) error {
 	// write send count
 	// write receive count
-	//  if any, write out data
-	// read status byte
-	// if any, read in data
+	// write out-data if any
+	// get write/read status
+	// read in-data if any
 	outCnt := len(outData)
 	if outCnt < 0 || outCnt > 4096 {
 		return fmt.Errorf("error, spi read/write out-data count (0-4096 bytes)")
