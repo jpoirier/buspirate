@@ -8,16 +8,26 @@ import (
 	"github.com/jpoirier/lsport"
 )
 
-// BusPirate represents a connection to a remote Bus Pirate device.
+// BusPirate represents a connection to a Bus Pirate device.
 type BusPirate struct {
 	*lsport.Term
 }
 
-// TODO: bp v3/v4 detection
+// V3
+const (
+	baudReply   = "Set serial port speed: (bps)\r\n 1. 300\r\n 2. 1200\r\n 3. 2400\r\n 4. 4800\r\n 5. 9600\r\n 6. 19200\r\n 7. 38400\r\n 8. 57600\r\n 9. 115200\r\n10. BRG raw value"
+	expectBaudReply   = "10. BRG raw value"
+	brgReply    = "Enter raw value for BRG"
+	brgValReply = "Adjust your terminal\r\nSpace to continue"
+	expectBrgValReply = "Space to continue"
+)
 
-// Open opens a connection to a BusPirate module and places it in binary mode.
+
+// Open opens a connection to a Bus Pirate device and places it in binary mode.
+// Supported baud rates in addition to the standard ones below 115200:
+// 500000, 1000000, and non Windows 2000000
 func Open(dev string, baudrate int) (*BusPirate, error) {
-	// the bp's default baud rate is 115200 at boot-up
+	// default baud rate is 115200 at boot-up
 	term, err := lsport.Open(dev, 115200)
 	if err != nil {
 		return nil, err
@@ -50,12 +60,15 @@ func resetBPBaudrate(term *lsport.Term, buadrate int) error {
 	case 1000000:
 		brg = "3\n"
 	case 2000000:
+		if runtime.GOOS == 'windows' {
+			return fmt.Errorf("error, 2000000 baud rate not supported on Windows")
+		}
 		brg = "1\n"
 	default:
 		return fmt.Errorf("error, invalid reset baudrate: %d, must be 5000000|1000000|5000000", buadrate)
-
 	}
-	// baudrate mode
+
+	// baud rate mode
 	if n, err := term.Write([]byte("b\n")); n == 0 || err != nil {
 		return fmt.Errorf("error writing baudrate command, n: %d, %v", n, err)
 	}
@@ -66,7 +79,7 @@ func resetBPBaudrate(term *lsport.Term, buadrate int) error {
 	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
 		return fmt.Errorf("error reading baudrate command reply, n: %d, %v", n, err)
 	}
-	if !strings.Contains(string(reply), baudReply) {
+	if !strings.Contains(string(reply), expectBaudReply) {
 		return fmt.Errorf("error, baudrate command reply is invalid")
 	}
 
@@ -96,7 +109,7 @@ func resetBPBaudrate(term *lsport.Term, buadrate int) error {
 	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
 		return fmt.Errorf("error reading brg value reply, n: %d, %v", n, err)
 	}
-	if !strings.Contains(string(reply), brgValReply) {
+	if !strings.Contains(string(reply), expectBrgValReply) {
 		return fmt.Errorf("error, brg value reply is invalid")
 	}
 
@@ -243,7 +256,7 @@ func (bp *BusPirate) SpiLeave() error {
 func (bp *BusPirate) SpiCS(high bool) error {
 	// 00000010 – CS low (0)
 	// 00000011 – CS high (1)
-	buf := []byte{spiCSState} // default to disabled
+	buf := []byte{spiCSState}
 	if high {
 		buf[0] |= 0x01
 	}
