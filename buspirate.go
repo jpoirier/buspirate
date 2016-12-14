@@ -2,6 +2,7 @@ package buspirate
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -15,13 +16,12 @@ type BusPirate struct {
 
 // V3
 const (
-	baudReply   = "Set serial port speed: (bps)\r\n 1. 300\r\n 2. 1200\r\n 3. 2400\r\n 4. 4800\r\n 5. 9600\r\n 6. 19200\r\n 7. 38400\r\n 8. 57600\r\n 9. 115200\r\n10. BRG raw value"
-	expectBaudReply   = "10. BRG raw value"
-	brgReply    = "Enter raw value for BRG"
-	brgValReply = "Adjust your terminal\r\nSpace to continue"
+	baudReply         = "Set serial port speed: (bps)\r\n 1. 300\r\n 2. 1200\r\n 3. 2400\r\n 4. 4800\r\n 5. 9600\r\n 6. 19200\r\n 7. 38400\r\n 8. 57600\r\n 9. 115200\r\n10. BRG raw value"
+	expectBaudReply   = "10. "
+	brgReply          = "Enter raw value for BRG"
+	brgValReply       = "Adjust your terminal\r\nSpace to continue"
 	expectBrgValReply = "Space to continue"
 )
-
 
 // Open opens a connection to a Bus Pirate device and places it in binary mode.
 // Supported baud rates in addition to the standard ones below 115200:
@@ -32,8 +32,15 @@ func Open(dev string, baudrate int) (*BusPirate, error) {
 	if err != nil {
 		return nil, err
 	}
-	if baudrate != 115200 {
-		err = resetBPBaudrate(term, baudrate)
+
+	// board: v3 - FTDI USB to serial chip, v4 - PIC integrated USB
+	board, err := getBPVersion(term)
+	if err != nil {
+		return nil, err
+	}
+
+	if baudrate != 115200 && board == "v3" {
+		err = resetBaudrate(term, baudrate)
 		if err != nil {
 			return nil, err
 		}
@@ -51,8 +58,25 @@ func Open(dev string, baudrate int) (*BusPirate, error) {
 	return &bp, bp.enterBinaryMode()
 }
 
-// resetBPBaudrate resets (non-volatile) the Bus Pirate's baud rate.
-func resetBPBaudrate(term *lsport.Term, buadrate int) error {
+func getBPVersion(term *lsport.Term) (string, error) {
+	if n, err := term.Write([]byte("i\n")); n == 0 || err != nil {
+		return "", fmt.Errorf("error writing board info command, n: %d, %v", n, err)
+	}
+	if err := term.Drain(); err != nil {
+		return "", err
+	}
+	reply := make([]byte, 200)
+	if n, err := term.BlockingRead(reply, 500); n == 0 || err != nil {
+		return "", fmt.Errorf("error reading board info command reply, n: %d, %v", n, err)
+	}
+	if strings.Contains(string(reply), "v4") {
+		return "v4", nil
+	}
+	return "v3", nil
+}
+
+// resetBaudrate resets (non-volatile) the Bus Pirate's baud rate.
+func resetBaudrate(term *lsport.Term, buadrate int) error {
 	var brg string
 	switch buadrate {
 	case 500000:
@@ -60,7 +84,7 @@ func resetBPBaudrate(term *lsport.Term, buadrate int) error {
 	case 1000000:
 		brg = "3\n"
 	case 2000000:
-		if runtime.GOOS == 'windows' {
+		if runtime.GOOS == "windows" {
 			return fmt.Errorf("error, 2000000 baud rate not supported on Windows")
 		}
 		brg = "1\n"
